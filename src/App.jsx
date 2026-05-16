@@ -1,18 +1,44 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { initializeApp } from 'firebase/app';
+import { 
+  getFirestore, 
+  collection, 
+  addDoc, 
+  onSnapshot, 
+  query, 
+  orderBy, 
+  serverTimestamp 
+} from 'firebase/firestore';
 
-/**
- * VerifiedPostForm Component
- */
-function VerifiedPostForm({ onPostAdded }) {
+// --- FIREBASE CONFIGURATION ---
+// බැජීගේ ඔරිජිනල් Config එක 🔥
+const firebaseConfig = {
+  apiKey: "AIzaSyBnGWk_KBQZ5VbJ-PiQ-yfI96PGIqJeYas",
+  authDomain: "nexiafloor.firebaseapp.com",
+  projectId: "nexiafloor",
+  storageBucket: "nexiafloor.firebasestorage.app",
+  messagingSenderId: "32941666692",
+  appId: "1:32941666692:web:97969efdf82eaed17cedd1"
+};
+
+// Initialize Firebase
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+
+// --- COMPONENT: VERIFIED POST FORM ---
+function VerifiedPostForm() {
   const [content, setContent] = useState('');
   const [pair, setPair] = useState('BTC/USDT');
   const [side, setSide] = useState('LONG');
   const [entryPrice, setEntryPrice] = useState('');
+  const [riskReward, setRiskReward] = useState('1:3');
   const [isApiAttached, setIsApiAttached] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [isPublishing, setIsPublishing] = useState(false);
 
   const handleSyncAPI = () => {
     setIsSyncing(true);
+    // Mocking an API call to Binance Read-Only Key
     setTimeout(() => {
       setEntryPrice((Math.random() * 5000 + 60000).toFixed(2));
       setIsApiAttached(true);
@@ -20,28 +46,37 @@ function VerifiedPostForm({ onPostAdded }) {
     }, 1500);
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     if (!content) return;
-
-    const newPost = {
-      id: Date.now(),
-      author: "NexiaTrader_Pro",
-      content,
-      setup: isApiAttached ? {
-        pair,
-        side,
-        entryPrice,
-        isVerified: true
-      } : null,
-      timestamp: "Just now"
-    };
-
-    onPostAdded(newPost);
     
-    setContent('');
-    setIsApiAttached(false);
-    setEntryPrice('');
+    setIsPublishing(true);
+
+    try {
+      // Writing to Firestore
+      await addDoc(collection(db, "posts"), {
+        content,
+        author: "Malith_Nexia", // පසුව Auth එකට කනෙක්ට් කරමු
+        setup: isApiAttached ? {
+          pair,
+          side,
+          entryPrice,
+          riskReward,
+          isVerified: true
+        } : null,
+        createdAt: serverTimestamp()
+      });
+
+      // Clear Form
+      setContent('');
+      setIsApiAttached(false);
+      setEntryPrice('');
+    } catch (error) {
+      console.error("Error adding post: ", error);
+      alert("Oops! Couldn't post the alpha. Check database permissions.");
+    } finally {
+      setIsPublishing(false);
+    }
   };
 
   return (
@@ -49,7 +84,7 @@ function VerifiedPostForm({ onPostAdded }) {
       <form onSubmit={handleSubmit}>
         <textarea
           className="w-full bg-[#161B22] border border-slate-800 rounded-xl p-4 text-slate-200 placeholder-slate-500 focus:outline-none focus:border-cyan-500 transition-all resize-none"
-          placeholder="අද මාකට් එක ගැන ඔයාගේ Alpha View එක මොකක්ද?"
+          placeholder="What's your Alpha View on the market today?"
           value={content}
           onChange={(e) => setContent(e.target.value)}
           rows="3"
@@ -73,9 +108,10 @@ function VerifiedPostForm({ onPostAdded }) {
 
           <button
             type="submit"
-            className="bg-gradient-to-r from-cyan-500 to-violet-600 text-slate-900 font-bold px-6 py-2 rounded-xl hover:opacity-90 transition-all shadow-lg shadow-cyan-500/20"
+            disabled={isPublishing || !content}
+            className="bg-gradient-to-r from-cyan-500 to-violet-600 text-slate-900 font-bold px-6 py-2 rounded-xl hover:opacity-90 transition-all shadow-lg shadow-cyan-500/20 disabled:opacity-50"
           >
-            Publish Alpha
+            {isPublishing ? "Publishing..." : "Publish Alpha"}
           </button>
         </div>
       </form>
@@ -83,22 +119,26 @@ function VerifiedPostForm({ onPostAdded }) {
   );
 }
 
-/**
- * PostCard Component
- */
+// --- COMPONENT: POST CARD ---
 function PostCard({ post }) {
+  // වෙලාව ලස්සනට හදාගන්න
+  const timeString = post.createdAt?.toDate ? post.createdAt.toDate().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Just now';
+
   return (
-    <div className="bg-[#0D1117] border border-slate-800 rounded-2xl p-6 hover:border-slate-700 transition-all shadow-xl group">
+    <div className="bg-[#0D1117] border border-slate-800 rounded-2xl p-6 hover:border-slate-700 transition-all shadow-xl group mb-6">
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center space-x-3">
           <div className="w-10 h-10 rounded-xl bg-slate-800 border border-slate-700 flex items-center justify-center text-slate-400 font-bold uppercase">
-            {post.author[0]}
+            {post.author ? post.author[0] : 'N'}
           </div>
           <div>
             <h4 className="text-sm font-bold text-slate-200 group-hover:text-cyan-400 transition-colors">{post.author}</h4>
-            <p className="text-[10px] text-slate-500 uppercase tracking-wider font-bold">{post.timestamp}</p>
+            <p className="text-[10px] text-slate-500 uppercase tracking-wider font-bold">{timeString}</p>
           </div>
         </div>
+        <button className="text-slate-500 hover:text-slate-300 transition-colors">
+          <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20"><path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z"></path></svg>
+        </button>
       </div>
 
       <p className="text-slate-300 text-[15px] mb-5 leading-relaxed">
@@ -127,29 +167,25 @@ function PostCard({ post }) {
   );
 }
 
-const initialPostsData = [
-  {
-    id: 1,
-    author: "CryptoCapo_Real",
-    content: "Watching the BTC weekly close. If we hold above 64k, the next leg up is inevitable. Risk management is key here.",
-    setup: { pair: "BTC/USDT", side: "LONG", entryPrice: "64250", isVerified: true },
-    timestamp: "2m ago"
-  },
-  {
-    id: 2,
-    author: "NexiaTrader_VIP",
-    content: "Scalping ETH on the 15m timeframe. Tight SL, targeting the previous high. Pure math, no emotions.",
-    setup: { pair: "ETH/USDT", side: "LONG", entryPrice: "3450", isVerified: true },
-    timestamp: "15m ago"
-  }
-];
-
+// --- MAIN APP COMPONENT ---
 export default function App() {
-  const [posts, setPosts] = useState(initialPostsData);
+  const [posts, setPosts] = useState([]);
+  const [loading, setLoading] = useState(true);
 
-  const handleAddPost = (newPost) => {
-    setPosts([newPost, ...posts]);
-  };
+  useEffect(() => {
+    // Real-time listener for the "posts" collection
+    const q = query(collection(db, "posts"), orderBy("createdAt", "desc"));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const postsData = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+      setPosts(postsData);
+      setLoading(false);
+    });
+
+    return () => unsubscribe();
+  }, []);
 
   return (
     <div className="min-h-screen bg-[#020617] text-slate-100 font-sans">
@@ -161,6 +197,14 @@ export default function App() {
               NEXIA FLOOR
             </h1>
           </div>
+          <div className="flex items-center space-x-4">
+             <div className="flex items-center space-x-2 text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-1 rounded border border-emerald-500/20">
+               <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></div>
+               <span>DB LIVE</span>
+             </div>
+             <span className="hidden md:inline-block text-[10px] font-bold text-slate-500 bg-slate-800 px-2 py-1 rounded tracking-widest uppercase border border-slate-700/50">Beta v1.0</span>
+             <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-cyan-500 to-blue-600 border border-slate-700 shadow-lg shadow-cyan-500/20"></div>
+          </div>
         </div>
       </nav>
 
@@ -170,7 +214,7 @@ export default function App() {
              <div className="w-1 h-4 bg-cyan-500 rounded-full"></div>
              <h2 className="text-xs font-bold text-slate-400 uppercase tracking-[0.2em]">Share Your Alpha</h2>
           </div>
-          <VerifiedPostForm onPostAdded={handleAddPost} />
+          <VerifiedPostForm />
         </div>
 
         <div className="space-y-6">
@@ -179,11 +223,20 @@ export default function App() {
               <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.8)]"></div>
               <h2 className="text-xs font-bold text-slate-400 uppercase tracking-[0.2em]">Live Floor Feed</h2>
             </div>
+            <span className="text-[10px] text-slate-600 font-bold uppercase tracking-widest">Global Stream</span>
           </div>
 
-          {posts.map((post) => (
-            <PostCard key={post.id} post={post} />
-          ))}
+          <div className="space-y-6">
+            {loading ? (
+              <div className="text-center text-slate-500 py-10 text-sm">Syncing with blockchain... ⏳</div>
+            ) : posts.length === 0 ? (
+              <div className="text-center text-slate-500 py-10 text-sm border border-dashed border-slate-800 rounded-xl">No alphas yet. Be the first to publish! 🚀</div>
+            ) : (
+              posts.map(post => (
+                <PostCard key={post.id} post={post} />
+              ))
+            )}
+          </div>
         </div>
       </main>
     </div>
